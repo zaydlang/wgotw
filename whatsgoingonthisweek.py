@@ -7,7 +7,7 @@ import imaplib
 import email
 import re
 import time
-from datetime import datetime
+import datetime
 from threading import Timer
 import schedule
 
@@ -23,47 +23,42 @@ async def start(ctx):
     await loop(ctx)
 
 async def loop(ctx):
-    time = datetime.today()
-    while True:
-        if (time - datetime.today()).total_seconds() < 0:
-            time = time + timedelta(days = 7)
-            days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday']
+    days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday']
+    
+    mail = imaplib.IMAP4_SSL('imap.gmail.com')
+    mail.login('bellarminebot@gmail.com', 'Bellybot')
+    mail.list()
+    # Out: list of "folders" aka labels in gmail.
+    mail.select("inbox") # connect to inbox.
 
-            mail = imaplib.IMAP4_SSL('imap.gmail.com')
-            mail.login('bellarminebot@gmail.com', 'Bellybot')
-            mail.list()
-            # Out: list of "folders" aka labels in gmail.
-            mail.select("inbox") # connect to inbox.
+    mail.select(readonly=1) # Select inbox or default namespace
+    date = (datetime.date.today() - datetime.timedelta(1)).strftime("%d-%b-%Y")
+    (retcode, messages) = mail.search(None, '(SENTSINCE {0})'.format(date))
 
-            mail.select(readonly=1) # Select inbox or default namespace
-            (retcode, messages) = mail.search(None, '(ALL)')
+    if retcode == 'OK' and len(messages) > 0:
+        print(messages[0])
+        for num in messages[0].decode('utf-8').split(' '):
+            typ, data = mail.fetch(num,'(RFC822)')
+            msg = email.message_from_string(data[0][1].decode('utf-8'))
+            typ, data = mail.store(num,'+FLAGS','\\Seen')
+            if retcode == 'OK':
+                wgotw = msg
+                print(str(wgotw))
 
-            try:
-                if retcode == 'OK' and len(messages) > 0:
-                    print(messages[0])
-                    for num in messages[0].decode('utf-8').split(' '):
-                        typ, data = mail.fetch(num,'(RFC822)')
-                        msg = email.message_from_string(data[0][1].decode('utf-8'))
-                        typ, data = mail.store(num,'+FLAGS','\\Seen')
-                        if retcode == 'OK':
-                            wgotw = msg
-                            print(wgotw)
+                schedule = []
+                for day in days:
+                    matches = re.findall(day + '[1-7\- :A-Za-z]*[1-7A-Z a-z]\n', str(wgotw))
+                    for match in matches:
+                        if (match.count('-') > 0):
+                            schedule.append(match)
 
-                            schedule = []
-                            for day in days:
-                                matches = re.findall(day + '[1-7\- :A-Za-z]*[1-7]', str(wgotw))
-                                for match in matches:
-                                    if (match.count('-') > 0):
-                                        schedule.append(match)
-
-                            print(schedule)
-                            await ctx.send('\n'.join(x for x in schedule))
-                            
-                        break
-                            
-                mail.close()
-            except:
-                print("no emails")
+                print(schedule)
+                channel = discord.utils.get(ctx.guild.channels, name="wgotw")
+                await channel.send('\n'.join(x for x in schedule))
+                
+            break
+                
+    mail.close()
 
     print("checc")
     
